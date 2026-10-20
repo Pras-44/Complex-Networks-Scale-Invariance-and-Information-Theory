@@ -6,11 +6,11 @@ from plotly.subplots import make_subplots
 
 def run_scaling_simulation():
     """
-    Simulates an agent-based monetary network modeling the phase transition 
+    Simulates an agent-based monetary network modeling the phase transition
     from linear arithmetic random walks to geometric multiplicative feedback loops.
     """
     # =====================================================================
-    # 1. THE GEOMETRIC SCALING SIMULATION
+    # 1. THE GEOMETRIC SCALING
     # =====================================================================
     num_agents = 2000
     initial_wealth = 100.0
@@ -62,21 +62,25 @@ def run_scaling_simulation():
         g1, g2 = shuffled[:num_agents // 2], shuffled[num_agents // 2:]
         flips = np.random.choice([-1, 1], size=num_agents // 2)
 
-        for i in range(num_agents // 2):
-            idx1, idx2 = g1[i], g2[i]
-            max_bet = min(wealth[idx1], wealth[idx2]) * bet_fraction
-            if max_bet <= 0.01: continue
+        # Vectorized bet and tax calculation
+        max_bet = np.minimum(wealth[g1], wealth[g2]) * bet_fraction
+        valid = max_bet > 0.01
 
-            tax = max_bet * tax_rate
-            net_bet = max_bet - tax
-            current_owner_wealth += (tax * 2.0)
+        tax = max_bet * tax_rate
+        net_bet = max_bet - tax
 
-            if flips[i] == 1:
-                wealth[idx1] += net_bet
-                wealth[idx2] -= max_bet
-            else:
-                wealth[idx1] -= max_bet
-                wealth[idx2] += net_bet
+        # Zero out inactive bets where threshold is not met
+        tax = np.where(valid, tax, 0.0)
+        net_bet = np.where(valid, net_bet, 0.0)
+        max_bet = np.where(valid, max_bet, 0.0)
+
+        # Compute gains/losses based on coin flips
+        delta_g1 = np.where(flips == 1, net_bet, -max_bet)
+        delta_g2 = np.where(flips == 1, -max_bet, net_bet)
+
+        wealth[g1] += delta_g1
+        wealth[g2] += delta_g2
+        current_owner_wealth += np.sum(tax * 2.0)
 
         for idx in sample_indices:
             player_tracks[idx].append(wealth[idx])
@@ -86,7 +90,7 @@ def run_scaling_simulation():
             distribution_history[r] = (wealth.copy(), current_owner_wealth)
 
     # =====================================================================
-    # 2. CONSTRUCTING THE THREE-PANEL COCKPIT
+    # 2. Three panels
     # =====================================================================
     fig = make_subplots(
         rows=1, cols=3,
@@ -138,7 +142,7 @@ def run_scaling_simulation():
     )
 
     # =====================================================================
-    # 3. INTERACTIVE TIMELINE SCRUB MECHANICAL MATRIX
+    # 3. Interactive Timeline
     # =====================================================================
     slider_steps = []
     for epoch in epochs:
@@ -177,7 +181,7 @@ def run_scaling_simulation():
         slider_steps.append(step)
 
     # =====================================================================
-    # 4. MONOCHROME INTERFACE CONFIGURATION & EXPORT
+    # 4. Interface Stuff
     # =====================================================================
     fig.update_layout(
         sliders=[{
@@ -224,5 +228,4 @@ def run_scaling_simulation():
 
 
 if __name__ == "__main__":
-    make_subplots() # Clear registry state
     run_scaling_simulation()
